@@ -15,6 +15,8 @@ export default function Overview() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
+  console.log(analytics)
+  console.log(logs)
   // 1. Fetch data on component mount
   useEffect(() => {
     async function load() {
