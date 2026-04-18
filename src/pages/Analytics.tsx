@@ -8,36 +8,51 @@ import {
 import DashboardLayout from "@/components/DashboardLayout";
 import DomainFilter from "@/components/DomainFilter";
 import { StatusBadge } from "@/components/StatusBadge";
-import { getAnalytics, AnalyticEntry } from "@/lib/mock-data";
+import { getAnalytics, getDomains, type AnalyticEntry } from "@/lib/mock-data";
 
 const COLORS = ["hsl(142,71%,45%)", "hsl(38,92%,50%)", "hsl(0,72%,51%)"];
 
 export default function AnalyticsPage() {
   const [domain, setDomain] = useState("all");
   const [rawData, setRawData] = useState<AnalyticEntry[]>([]);
+  const [domains, setDomains] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch data in useEffect to handle the Promise correctly
   useEffect(() => {
-    async function loadData() {
+    let cancelled = false;
+
+    async function load(showLoading = false) {
+      if (showLoading) setLoading(true);
       try {
-        const data = await getAnalytics("All");
-        setRawData(data);
+        const [data, dData] = await Promise.all([
+          getAnalytics(domain === "all" ? "All" : domain),
+          getDomains(),
+        ]);
+
+        if (!cancelled) {
+          setRawData(data);
+          setDomains(dData);
+        }
       } catch (error) {
-        console.error("Failed to fetch analytics:", error);
+        if (!cancelled) console.error("Failed to fetch analytics:", error);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
-    loadData();
-  }, []);
 
-  // Sync filtering based on rawData state
+    load(true);
+    const interval = setInterval(() => load(false), 30_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [domain]);
+
   const filtered = useMemo(() => {
     return domain === "all" ? rawData : rawData.filter((a) => a.domain_name === domain);
   }, [rawData, domain]);
 
-  // Sync calculation for hourly data
   const hourlyData = useMemo(() => {
     const map = new Map<string, { hour: string; avg: number; min: number; max: number; count: number }>();
     for (const e of filtered) {
@@ -55,7 +70,6 @@ export default function AnalyticsPage() {
     return Array.from(map.values()).map((h) => ({ ...h, avg: Math.round(h.avg / h.count) }));
   }, [filtered]);
 
-  // Sync calculation for status distribution
   const statusDist = useMemo(() => {
     const counts = { healthy: 0, degraded: 0, down: 0 };
     for (const e of filtered) {
@@ -64,7 +78,6 @@ export default function AnalyticsPage() {
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [filtered]);
 
-  // Sync calculation for incidents
   const incidentList = useMemo(() => {
     return filtered.filter((e) => e.incidents.length > 0).slice(0, 10);
   }, [filtered]);
@@ -81,7 +94,7 @@ export default function AnalyticsPage() {
           <p className="text-muted-foreground mt-1">Hourly performance metrics from /analytic</p>
         </div>
 
-        <DomainFilter selected={domain} onChange={setDomain} />
+        <DomainFilter selected={domain} onChange={setDomain} domains={domains} />
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="glass rounded-xl p-6 lg:col-span-2">
@@ -128,7 +141,7 @@ export default function AnalyticsPage() {
                 <YAxis tick={{ fill: "hsl(0,0%,50%)", fontSize: 11 }} axisLine={false} tickLine={false} unit="ms" />
                 <Tooltip contentStyle={{ background: "hsl(0,0%,7%)", border: "1px solid hsl(0,0%,14%)", borderRadius: 8, color: "hsl(0,0%,92%)" }} />
                 <Bar dataKey="avg" fill="hsl(142,71%,45%)" radius={[4, 4, 0, 0]} name="Avg Latency" />
-              </BarChart>
+            </BarChart>
             </ResponsiveContainer>
           </div>
         </div>

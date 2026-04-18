@@ -1,27 +1,20 @@
-// Mock data generators for analytics and logs
 import axios from "axios";
 
 const API_URL = "http://localhost:5000";
 
 export async function getDomains(): Promise<string[]> {
-  const domains = await axios.post(
-    `${API_URL}/domains`
-  ).then((response) => response.data);
-  return domains;
+  const response = await axios.post(`${API_URL}/domains`);
+  return response.data;
 }
 
 export async function getLogs(domain_name: string): Promise<LogEntry[]> {
-  const logs = await axios.post(`${API_URL}/log`, {
-    domain_name: domain_name
-  }).then((response) => response.data);
-  return logs;
+  const response = await axios.post(`${API_URL}/log`, { domain_name });
+  return response.data;
 }
 
 export async function getAnalytics(domain_name: string): Promise<AnalyticEntry[]> {
-  const analytics = await axios.post(`${API_URL}/analytic`, {
-    domain_name: domain_name
-  }).then((response) => response.data);
-  return analytics;
+  const response = await axios.post(`${API_URL}/analytic`, { domain_name });
+  return response.data;
 }
 
 export interface AnalyticEntry {
@@ -54,6 +47,3 @@ export function getStatusCodeColor(code: number) {
   if (code < 400) return "text-warning";
   return "text-destructive";
 }
-
-export const DOMAINS = await getDomains();
-

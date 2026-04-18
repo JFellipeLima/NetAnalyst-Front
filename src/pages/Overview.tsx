@@ -7,33 +7,49 @@ import DashboardLayout from "@/components/DashboardLayout";
 import StatCard from "@/components/StatCard";
 import DomainFilter from "@/components/DomainFilter";
 import { StatusBadge } from "@/components/StatusBadge";
-import { getAnalytics, getLogs, type AnalyticEntry, type LogEntry } from "@/lib/mock-data";
+import { getAnalytics, getLogs, getDomains, type AnalyticEntry, type LogEntry } from "@/lib/mock-data";
 
 export default function Overview() {
   const [domain, setDomain] = useState("all");
   const [analytics, setAnalytics] = useState<AnalyticEntry[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [domains, setDomains] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load(showLoading = false) {
+      if (showLoading) setLoading(true);
+      try {
+        const [aData, lData, dData] = await Promise.all([
+          getAnalytics(domain === "all" ? "All" : domain),
+          getLogs(domain === "all" ? "All" : domain),
+          getDomains(),
+        ]);
+        if (!cancelled) {
+          setAnalytics(aData);
+          setLogs(lData);
+          setDomains(dData);
+        }
+      } catch (err) {
+        if (!cancelled) console.error("Failed to fetch dashboard data:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load(true);
+    const interval = setInterval(() => load(false), 30_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [domain]);
 
   console.log(analytics)
   console.log(logs)
-  // 1. Fetch data on component mount
-  useEffect(() => {
-    async function load() {
-      try {
-        const [aData, lData] = await Promise.all([getAnalytics("All"), getLogs("All")]);
-        setAnalytics(aData);
-        setLogs(lData);
-      } catch (err) {
-        console.error("Failed to fetch dashboard data:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, []);
-
-  // 2. Derive data from state (Synchronously)
   const filtered = useMemo(
     () => (domain === "all" ? analytics : analytics.filter((a) => a.domain_name === domain)),
     [domain, analytics]
@@ -43,12 +59,13 @@ export default function Overview() {
     const map = new Map<string, AnalyticEntry>();
     for (const entry of filtered) {
       const existing = map.get(entry.domain_name);
-      if (!existing || new Date(entry.date) > new Date(existing.date)) map.set(entry.domain_name, entry);
+      if (!existing || new Date(entry.date) > new Date(existing.date)) {
+        map.set(entry.domain_name, entry);
+      }
     }
     return Array.from(map.values());
   }, [filtered]);
 
-  // Derived metrics
   const totalIncidents = useMemo(() => filtered.reduce((acc, a) => acc + a.incidents.length, 0), [filtered]);
   const avgLatency = useMemo(() => Math.round(filtered.reduce((acc, a) => acc + a.avg_latency, 0) / (filtered.length || 1)), [filtered]);
   const uptimePercent = useMemo(() => ((filtered.filter((a) => a.status === "healthy").length / (filtered.length || 1)) * 100).toFixed(1), [filtered]);
@@ -69,6 +86,7 @@ export default function Overview() {
     }
     return Array.from(hourMap.values()).map((h) => ({ ...h, avg: Math.round(h.avg / h.count) }));
   }, [filtered]);
+
   if (loading) return <DashboardLayout><div>Loading dashboard...</div></DashboardLayout>;
 
   return (
@@ -79,7 +97,7 @@ export default function Overview() {
           <p className="text-muted-foreground mt-1">Real-time uptime monitoring overview</p>
         </div>
 
-        <DomainFilter selected={domain} onChange={setDomain} />
+        <DomainFilter selected={domain} onChange={setDomain} domains={domains} />
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard title="Uptime" value={`${uptimePercent}%`} subtitle="Last 24h" icon={Activity} variant="success" />
